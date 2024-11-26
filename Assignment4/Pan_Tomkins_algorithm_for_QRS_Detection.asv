@@ -1,0 +1,63 @@
+% The sampling rate is 200 Hz 
+FS = 200;
+
+% Calculate the sample interval from FS
+T = 1 / FS;
+
+% Load the ECG from the file 'ECG.txt'
+ECG = load('ECG.txt');
+
+% Subtract the first sample value to prevent P-T from amplifying the initial step
+ECG = ECG - ECG(1);
+
+% Lowpass filter the ECG
+b_lowpass = (1/32) * [1 0 0 0 0 0 -2 0 0 0 0 0 1]; % Numerator coefficients for H(z)
+a_lowpass = [1 -2 1];                              % Denominator coefficients for H(z)
+ECG_filtered1 = filter(b_lowpass, a_lowpass, ECG);
+
+% Highpass filter the lowpass filtered ECG
+b_highpass = [-1, zeros(1, 15), 32, -32, zeros(1, 14), 1]; % Numerator for Hhp(z)
+a_highpass = [32, -32];                                                    % Denominator for Hhp(z)
+ECG_filtered2 = filter(b_highpass, a_highpass, ECG_filtered1);
+
+% Differential filter the high- and lowpass filtered ECG
+b_diff = [1, 2, 0, -2, -1];  % Numerator coefficients
+a_diff = 8;                        % FIR filter
+ECG_filtered3 = filter(b_diff, a_diff, ECG_filtered2);
+
+% Square the derivative filtered signal
+ECG_filtered4 = ECG_filtered3 .^ 2;
+
+% Moving window integrator filter the squared signal
+% Window size
+N = 30;
+b_integ = ones(1, N) / N;  % Numerator coefficients (moving average)
+a_integ = 1;               % Denominator coefficients (FIR filter)
+ECG_filtered5 = filter(b_integ, a_integ, ECG_filtered4);
+
+% Set the blanking interval to 250 ms, but convert it to samples for the findQRS function
+blankingInterval = (250 * FS) / 1000;
+
+% The amplitude threshold for QRS detection are set to these
+treshold1 = 500; 
+treshold2 = 2650; 
+
+% Call the findQRS function 
+%[QRSStart_ECG, QRSEnd_ECG] = findQRS(ECG_filtered5, blankingInterval, treshold1, treshold2);
+
+% Calculate the cumulative filter delays (in samples)
+delay_lowpass = (6 + 6) / 2; % 6-tap delay forward and backward
+delay_highpass = 16;        % Highpass filter delay
+delay_diff = 2;             % Differential filter delay
+delay_integ = (N - 1) / 2;  % Moving window integrator delay
+delays = delay_lowpass + delay_highpass + delay_diff + delay_integ;
+
+% Display results
+disp('Detected QRS complex start indices:');
+%disp(QRSStart_ECG);
+
+disp('Detected QRS complex end indices:');
+%disp(QRSEnd_ECG);
+
+disp('Total filter delay (in samples):');
+disp(delays);
